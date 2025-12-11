@@ -1,163 +1,160 @@
 <?php
+declare(strict_types=1);
 session_start();
-$referer = $_SERVER['HTTP_REFERER'];
-$_SESSION['tacn'] = $referer;
-?>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.bundle.min.js" integrity="sha384-xrRywqdh3PHs8keKZN+8zzc5TX0GRTLCcmivcbNJWm2rs5C8PRhcEn3czEjhAO9o" crossorigin="anonymous"></script>
-<link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
-<script
-  src="https://code.jquery.com/jquery-3.4.1.min.js"
-  integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
-  crossorigin="anonymous"></script>
-<link rel="icon" 
-      type="image/png" 
-      href="images/favicon.png">
-<title>Text a Call Number</title>
-</head>
-<?php 
 
-// Set PHP Variables
-$referer = $_SERVER['HTTP_REFERER'];
-$pagetitle = "MUSCAT Plus: Text a Call Number"; // Page Title
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/alma-client.php';
 
-// Include file with functions to query Alma API
-require("alma-api-for-sms.php");
+$title = isset($_GET['title']) ? trim((string)$_GET['title']) : '';
+$mms   = isset($_GET['mms'])   ? trim((string)$_GET['mms'])   : '';
 
-?>
-<!-- Begin Page Editing Here -->
-<div class="header" style="background: #002f6c;">
-	<img style="padding: 10px;" style="width: 10%;" alt="Musselman Library" src="images/logo.png"/>
-</div>
-<div class="container">
-<h1>MUSCAT Plus: Text a Call Number</h1>
+$locations = [];
+$errorMsg  = '';
 
-<?php
-
-// Get info posted from catalog
-//$author = trim(htmlspecialchars($_GET["author"]));
-$title = trim(htmlspecialchars($_GET["title"]));
-$mms = trim(htmlspecialchars($_GET["mms"]));
-
-echo '<form name="sms" method="get" action="send-sms.php" onsubmit="return CheckForm(this)">';
-
-echo '<h2>Title</h2>';
-
-// Remove semicolons from titles
-echo '<p>' . $title . '</p>';
-
-echo '<h2>Select Item Location</h2>';
-
-// Create a list of holdings and ask user to choose
-//--- Use mms to get info from Alma API ---//
-
-// Get holdings info in XML format, and display choices for locations
-if ($mms) {
-	$xml = getAvailabilityInfo($mms);
-	$bib = simplexml_load_string($xml);
-	$locations = listAvailability($bib);
+if ($mms !== '') {
+    try {
+        $almaKey  = defined('ALMA_API_KEY')  ? (string)ALMA_API_KEY  : (getenv('ALMA_API_KEY') ?: '');
+        $almaBase = defined('ALMA_API_BASE') ? (string)ALMA_API_BASE : (getenv('ALMA_API_BASE') ?: '');
+        if ($almaKey === '' || $almaBase === '') {
+            throw new RuntimeException('Alma configuration (ALMA_API_KEY/ALMA_API_BASE) is missing.');
+        }
+        $holdings = alma_get_holdings_json($mms, $almaKey, $almaBase);
+        $locations = alma_extract_location_options($holdings, $mms, $almaKey, $almaBase);
+    } catch (Throwable $e) {
+        $errorMsg = $e->getMessage();
+    }
 }
-
-echo $locations . '<br />';
-
-echo '<h3>Mobile Phone Number</h3>';
-
-//
-echo '<input type="text" name="number" size="15" id="number" /></p>';
-
-echo '<p>';
-echo '<input type="hidden" name="title" value="' . $title . '" />';
-echo '<input type="hidden" name="mms" value="' . $mms . '" />';
-//echo '<input type="submit" name="submit" value=" Send Message " id="inputFocusTarget" autofocus/><label for "submit"> <em>Standard messaging rates apply.</em></label></p></form>';
-echo '<input type="submit" name="submit" value=" Send " id="inputFocusTarget" autofocus/></p></form>';
-echo '<p>Standard messaging rates apply.</p>';
-//echo '<p><a href="' . $referer . '">Return to MUSCAT Plus without texting the call number</a></p>';
-echo '<p><a href="JavaScript:window.close()">Return to MUSCAT Plus without texting the call number</a></p>';
-
 ?>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Text a Call Number</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <style>
+    :root {
+      --gap: .9rem;
+      --border: #d0d7de;
+      --muted: #6b7280;
+    }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 1.5rem; }
+    .card { max-width: 640px; border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; }
+    h1 { font-size: 1.35rem; margin: 0 0 .5rem; }
+    .title { font-weight: 600; margin-bottom: .25rem; }
+    .subtle { color: var(--muted); font-size: .95rem; margin: 0 0 1rem; }
+    form { display: grid; gap: var(--gap); margin-top: .5rem; }
+    .group { display: grid; gap: .35rem; }
+    label { font-weight: 600; }
+    input[type="text"], input[type="tel"] {
+      padding: .6rem .7rem; font-size: 1rem; border: 1px solid var(--border); border-radius: 8px; width: 100%;
+    }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; }
+    fieldset legend { font-weight: 700; padding: 0 .4rem; }
+    .radios { display: grid; gap: .35rem; padding: .5rem .75rem .75rem; max-height: 260px; overflow: auto; }
+    .radio { display: flex; align-items: center; gap: .5rem; }
+    .consent { display: flex; align-items: start; gap: .6rem; font-size: .95rem; }
+    .error { color: #b42318; background: #fee4e2; border: 1px solid #fda29b; padding: .6rem .75rem; border-radius: 8px; }
+    .hint { color: var(--muted); font-size: .9rem; }
+    button {
+      background: #0d6efd; color: #fff; border: 0; padding: .7rem 1rem; border-radius: 10px; font-size: 1rem; cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .header-logo {display: block;}
+    @media (max-width: 600px) {.header-logo {display: none;}}
+    button:focus {outline: 3px solid #0d6efd; outline-offset: 3px;}
+  </style>
+</head>
+<body>
+  <header><img class="header-logo" src="images/library-logo.png" alt="Musselman Library"></header>
 
-</div>
-</div>
-</div>
+  <div class="card" role="region" aria-labelledby="tacn-heading">
+    <h1 id="tacn-heading">MUSCAT Plus Text a Call Number</h1>
+
+    <?php if ($title !== ''): ?>
+      <div class="title"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
+    <!-- uncomment if debugging for MMSID -->
+    <?php
+      /*if ($mms !== ''): ?>
+      <div class="subtle">MMS ID: <?= htmlspecialchars($mms, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; */?>
+
+    <?php if ($errorMsg !== ''): ?>
+      <div class="error">Error: <?= htmlspecialchars($errorMsg, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
+
+    <form action="send-sms.php" method="post" id="tacn-form" onsubmit="return validate()">
+      <input type="hidden" name="mms" value="<?= htmlspecialchars($mms, ENT_QUOTES, 'UTF-8') ?>">
+      <input type="hidden" name="title" value="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>">
+
+      <fieldset class="group">
+        <legend>Item location</legend>
+        <div class="radios" id="locations">
+          <?php if (!empty($locations)): ?>
+            <?php foreach ($locations as $i => $opt): ?>
+              <div class="radio">
+                <input type="radio" name="holdings" id="<?= htmlspecialchars($opt['id'], ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars($opt['value'], ENT_QUOTES, 'UTF-8') ?>">
+                <label for="<?= htmlspecialchars($opt['id'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($opt['label'], ENT_QUOTES, 'UTF-8') ?></label>
+              </div>
+            <?php endforeach; ?>
+          <?php else: ?>
+            <p class="hint">No locations found for this record.</p>
+          <?php endif; ?>
+        </div>
+        <div class="hint">Choose where you’ll find this item in the library. If only one location is listed, it will be selected automatically.</div>
+      </fieldset>
+
+      <div class="group">
+        <label for="to">Mobile number (U.S. only)</label>
+        <input id="to" name="to" type="tel" inputmode="numeric" autocomplete="off" placeholder="7175551234" required>
+        <div class="hint">Enter a 10-digit U.S. number. +1 or 1 prefix is allowed (e.g., +17175551234); other characters are ignored.</div>
+      </div>
+
+      <div class="consent">
+        <input id="consent" name="consent" type="checkbox" value="yes" required aria-required="true">
+        <label for="consent">By checking this box, you consent to receive a one-time text message from Musselman Library with call number information for the material you have selected. Standard messaging and data rates may apply. If you do not consent, or have changed your mind, <a href="JavaScript:window.close()">return to MUSCAT Plus without texting the call number</a>.</label>
+      </div>
+
+      <button type="submit">Send text</button>
+    </form>
+  </div>
+
+  <script>
+    (function autoCheckSingleLocation(){
+      const radios = document.querySelectorAll('input[type="radio"][name="holdings"]');
+      if (radios.length === 1) radios[0].checked = true;
+    })();
+
+    function validate() {
+      const phone = document.getElementById('to').value.trim();
+      const consent = document.getElementById('consent').checked;
+
+      const digits = phone.replace(/\D/g, '');
+      if (!/^1?\d{10}$/.test(digits)) {
+        alert('Please enter a valid U.S. mobile number (10 digits, e.g., 7175551234 or +17175551234).');
+        return false;
+      }
+
+      if (!consent) {
+        alert('You must consent to receive the text message.');
+        return false;
+      }
+
+      document.getElementById('to').value = digits;
+      return true;
+    }
+  </script>
+
+  <script>
+    document.getElementById('consent').addEventListener('change', function () {
+        if (this.checked) {
+            // Move focus to the submit button
+            const btn = document.querySelector('button[type="submit"]');
+            if (btn) btn.focus();
+        }
+    });
+  </script>
+
 </body>
 </html>
-
-<script language="javascript" type="text/javascript">
-
-jQuery(document).ready(function() {
-    console.log("ready!");
-	jQuery("#email").hide();
-});
-
-// For Debugging
-/*
-var holdings = document.forms["sms"]["holdings"];
-console.log("holdings: " + holdings);
-var holdingsType = holdings.toString();
-console.log("type: " + holdingsType);
-
-if (holdingsType == '[object RadioNodeList]') {
-	console.log("There is more than one choice");	
-} else if (holdingsType == '[object HTMLInputElement]') {
-	console.log("There is only one choice");	
-	console.log("The choice is checked: " + holdings.checked);
-} else {
-	console.log("Something went wrong");	
-}
-*/
-
-// Make the user choose a location
-function validateRadio(radios) {
-	
-	var radiosType = radios.toString();
-	console.log("type: " + radiosType);
-	
-	// There are multiple locations
-	if (radiosType == '[object RadioNodeList]') {
-		var length = radios.length;
-		console.log('loop length: ' + length + '<br />');
-		for (i = 0; i < length; ++ i) {
-			console.log('loop length: ' + length + '<br />');
-			console.log('trip through loop: ' + i + '<br />');
-			if (radios [i].checked) return true;
-			//break;
-		}
-	// There is only one location
-	} else if (radiosType == '[object HTMLInputElement]') {
-		if (radios.checked) {
-			return true;	
-		}
-	}
-	// No location chosen
-    return false;
-}
-
-
-// Make sure all necessary fields are selected
-function CheckForm(theForm) {
-		
-	var phone = theForm.number.value;
-	var noMatch = !/^\d{10}$/.test(phone);
-	var radio = validateRadio(document.forms["sms"]["holdings"]);
-	console.log('radio ' + radio);
-		
-	if(noMatch) {
-		alert('Please enter a valid phone number');
-		theForm.number.focus();
-		return false;
-	}
-	
-	if(!radio) {
-		alert('Please choose a location.'); 
-		return false;
-	}
-	
-	return true;
-}
-
-
-</script>
-
-
-<!-- End Page Editing Here -->
